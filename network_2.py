@@ -4,7 +4,10 @@ from collections import Counter
 import tensorflow as tf
 import numpy as np
 
+from tensorflow.python.ops import rnn, rnn_cell
 import pymysql
+from tensorflow.python.ops.rnn import static_rnn
+from tflearn import BasicLSTMCell
 from tflearn.data_utils import VocabularyProcessor
 
 from utils import create_lookup_tables
@@ -217,75 +220,61 @@ def create_neural_network():
     print('Y_test', Y_test.shape)
     print('size of vocabulary', len(vocab_to_int))
 
-    epochs = 20
-    #sequence_length = max_sentence_length
-    #embedding_length = len(vocab_to_int)
-    num_classes = 2
-    grad_clip = 5
+    time_steps=128
+    num_units=128 #hidden LSTM units
 
-    batch_size = 10                 # Sequences per batch
-    num_steps = 500 # Number of sequence steps per batch
-    lstm_size = 128                 # Size of hidden layers in LSTMs
-    num_layers = 2                  # Number of LSTM layers
-    learning_rate = 0.01            # Learning rate
-    keep_prob = 0.5                 # Dropout keep probability
+    n_input=500 #rows of 28 pixels
+
+    learning_rate=0.001 #learning rate for adam
+
+    n_classes=2 #mnist is meant to be classified in 10 classes(0-9).
+
+    batch_size=128 #size of batch
 
     tf.reset_default_graph()
 
-    # Build the input placeholder tensors
-    inputs, targets, keep_prob = build_inputs(batch_size, num_steps)
+    out_weights = tf.Variable(tf.random_normal([n_input, n_classes]))
+    out_bias = tf.Variable(tf.random_normal([n_classes]))
 
-    # Build the LSTM cell
-    cell, initial_state = build_lstm(lstm_size, num_layers, batch_size, keep_prob)
+    x = tf.placeholder("float", [None, n_input])
+    y = tf.placeholder("float", [None, n_classes])
 
-    ### Run the data through the RNN layers
-    # First, one-hot encode the input tokens
-    x_one_hot = tf.one_hot(inputs, num_classes)
-    print('inputs', inputs.shape)
-    print('num_classes', num_classes)
-    print('x_one_hot', x_one_hot.shape)
+    #input = tf.unstack(x, n_input, 0)
 
-    # Run each sequence step through the RNN with tf.nn.dynamic_rnn
-    outputs, state = tf.nn.dynamic_rnn(cell, x_one_hot, initial_state=initial_state)
-    print('outputs', outputs.shape)
-    final_state = state
+    lstm_layer = BasicLSTMCell(num_units, forget_bias=1)
+    outputs, _ = rnn.rnn(lstm_layer, x, dtype=tf.float32)
+    prediction = tf.matmul(outputs[-1], out_weights)+out_bias
 
-    # Get softmax predictions and logits
-    prediction, logits = build_output(outputs, lstm_size, num_classes)
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=y))
+    opt = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 
-    # Loss and optimizer (with gradient clipping)
-    loss = build_loss(logits, targets, lstm_size, num_classes)
-    optimizer = build_optimizer(loss, learning_rate, grad_clip)
+    #model evaluation
+    correct_prediction=tf.equal(tf.argmax(prediction,1),tf.argmax(y,1))
+    accuracy=tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
 
+    init=tf.global_variables_initializer()
     with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
+        sess.run(init)
+        iter=1
+        while iter<800:
+            for batch_x, batch_y in batch_features_labels(X_train, Y_train, batch_size):
+            #batch_x,batch_y=mnist.train.next_batch(batch_size=batch_size)
+                print('batch_x', batch_x.shape)
+                print('batch_y', batch_y.shape)
 
-        counter = 0
-        for e in range(epochs):
-            # Train network
-            new_state = sess.run(initial_state)
-            total_loss = 0
-            for x, y in batch_features_labels(X_train, Y_train, batch_size):
-                print('x', x.shape)
-                print('y', y.shape)
-                counter += 1
-                start = time.time()
-                feed = {inputs: x,
-                        targets: y,
-                        keep_prob: 0.5,
-                        initial_state: new_state}
+                #batch_x = batch_x.reshape((batch_size,time_steps,n_input))
 
-                batch_loss, new_state, _ = sess.run([loss,
-                                                     final_state,
-                                                     optimizer],
-                                                    feed_dict=feed)
+                sess.run(opt, feed_dict={x: batch_x, y: batch_y})
 
-                end = time.time()
-                print('Epoch: {}/{}... '.format(e+1, epochs),
-                      'Training Step: {}... '.format(counter),
-                      'Training loss: {:.4f}... '.format(batch_loss),
-                      '{:.4f} sec/batch'.format((end-start)))
+                if iter %10==0:
+                    acc=sess.run(accuracy,feed_dict={x:batch_x, y:batch_y})
+                    los=sess.run(loss,feed_dict={x:batch_x,y:batch_y})
+                    print("For iter ", iter)
+                    print("Accuracy ", acc)
+                    print("Loss ", los)
+                    print("__________________")
 
+                iter=iter+1
 
 if __name__ == '__main__':
     preprocess()

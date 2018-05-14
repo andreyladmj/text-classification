@@ -56,6 +56,15 @@ def get_batches(int_text, batch_size, seq_length):
     return list(zip(x_batches, y_batches))
 
 
+def batch_features_labels(features, labels, batch_size):
+    """
+    Split features and labels into batches
+    """
+    for start in range(0, len(features), batch_size):
+        end = min(start + batch_size, len(features))
+        yield features[start:end], labels[start:end]
+
+
 def create_lookup_tables(words):
     """
     Create lookup tables for vocabulary
@@ -67,7 +76,7 @@ def create_lookup_tables(words):
         words = Counter(words)
 
     sorted_vocab = sorted(words, key=words.get, reverse=True)
-    int_to_vocab = {(ii+1): word for ii, word in enumerate(sorted_vocab)}
-    vocab_to_int = {word: (ii+1) for ii, word in int_to_vocab.items()}
+    int_to_vocab = {int(ii+1): word for ii, word in enumerate(sorted_vocab)}
+    vocab_to_int = {word: int(ii+1) for ii, word in int_to_vocab.items()}
 
     return vocab_to_int, int_to_vocab
