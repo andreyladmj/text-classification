@@ -24,10 +24,10 @@ class DBModel():
         self.Y_test = []
         self.vocab_to_int = {}
         self.int_to_vocab = {}
-        self.max_sentence_length = 10
+        self.max_sentence_length = 25
 
     def create_dataset(self):
-        self.db_cursor_read.execute('SELECT * FROM prepared_orders ORDER BY rand()')
+        self.db_cursor_read.execute('SELECT * FROM prepared_orders where description_words = 25 ORDER BY rand()')
         for row in self.db_cursor_read: self.add(row)
         self.preprocess_data()
 
@@ -63,7 +63,7 @@ class DBModel():
             first_order
         ]
 
-        self.X_train.append(x)
+        self.X_train.append(words)
         self.Y_train.append([y])
         # '1', 'Bidding', NULL, '1'
         # '2', 'In Progress', NULL, '1'
@@ -86,15 +86,27 @@ class DBModel():
         self.counter[word] = self.counter.get(word, 0) + 1
 
     def preprocess_data(self):
+        self.vocab_to_int, self.int_to_vocab = create_lookup_tables(self.counter)
+
         for row in range(len(self.X_train)):
-            self.X_train[row][0] = self.string_to_vocab(self.X_train[row][0], self.max_sentence_length)
+            #self.X_train[row][0] = self.string_to_vocab(self.X_train[row][0], self.max_sentence_length)
+            self.X_train[row] = self.string_to_vocab(self.X_train[row], self.max_sentence_length)
 
         test_data_size = 5000
-        self.X_test = np.array(self.X_train[:test_data_size], dtype=np.int32)
-        self.Y_test = np.array(self.Y_train[:test_data_size])
 
-        self.X_train = np.array(self.X_train[test_data_size:], dtype=np.int32)
-        self.Y_train = np.array(self.Y_train[test_data_size:])
+        self.X_train = np.array(self.X_train, dtype=np.float)
+        self.Y_train = np.array(self.Y_train, dtype=np.float)
+
+        # self.X_test = self.X_train[:test_data_size]
+        # self.Y_test = self.Y_train[:test_data_size]
+        # self.X_train = self.X_train[test_data_size:]
+        # self.Y_train = self.Y_train[test_data_size:]
+
+        # self.X_test = np.array(self.X_train[:test_data_size], dtype=np.int32)
+        # self.Y_test = np.array(self.Y_train[:test_data_size])
+        #
+        # self.X_train = np.array(self.X_train[test_data_size:], dtype=np.int32)
+        # self.Y_train = np.array(self.Y_train[test_data_size:])
 
     def string_to_vocab(self, words, max_document_length):
         x = np.zeros(max_document_length)
